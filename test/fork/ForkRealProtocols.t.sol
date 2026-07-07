@@ -40,6 +40,7 @@ contract ForkRealProtocols is Test {
     address constant DAI = 0x6B175474E89094C44Da98b954EedeAC495271d0F; // 18 decimals
     address constant AAVE_V3_POOL = 0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2;
     address constant SDAI = 0x83F20F44975D03b1b09e64809B757c47f942BEeA; // Spark savings DAI (ERC-4626, asset = DAI)
+    address constant MORPHO_STEAKHOUSE_USDC = 0xBEEF01735c132Ada46AA9aA4c54623cAA92A64CB; // MetaMorpho vault (ERC-4626, asset = USDC)
     address constant UNIV3_ROUTER = 0xE592427A0AEce92De3Edee1F18E0157C05861564; // Uniswap V3 SwapRouter
 
     ProtocolRegistry registry;
@@ -48,6 +49,7 @@ contract ForkRealProtocols is Test {
     address owner = makeAddr("owner");
     bytes32 aaveId;
     bytes32 vaultId;
+    bytes32 morphoId;
 
     function setUp() public {
         string memory rpc = vm.envOr("MAINNET_RPC_URL", string(""));
@@ -61,12 +63,14 @@ contract ForkRealProtocols is Test {
         // register the REAL protocols + assets + router
         registry.addProtocol(AdapterType.AAVE, AAVE_V3_POOL, USDC, "lending");
         registry.addProtocol(AdapterType.ERC4626, SDAI, DAI, "savings");
+        registry.addProtocol(AdapterType.ERC4626, MORPHO_STEAKHOUSE_USDC, USDC, "savings"); // Morpho = same adapter
         registry.addAsset(USDC, PositionClass.STABLECOIN);
         registry.addAsset(DAI, PositionClass.STABLECOIN);
         registry.setRoute(UNIV3_ROUTER, true);
 
         aaveId = registry.positionId(AdapterType.AAVE, AAVE_V3_POOL, USDC);
         vaultId = registry.positionId(AdapterType.ERC4626, SDAI, DAI);
+        morphoId = registry.positionId(AdapterType.ERC4626, MORPHO_STEAKHOUSE_USDC, USDC);
 
         vm.prank(owner);
         account = SmartInvestmentAccount(factory.createAccount(bytes32(uint256(1))));
@@ -110,6 +114,21 @@ contract ForkRealProtocols is Test {
         account.exit(vaultId, type(uint256).max);
         assertEq(IERC4626(SDAI).balanceOf(address(account)), 0, "all shares redeemed");
         assertGe(IERC20(DAI).balanceOf(address(account)), 9_999e18, "DAI back to idle (>= principal)");
+    }
+
+    /// Real Morpho — a MetaMorpho vault ("Steakhouse USDC") is ERC-4626, so it uses the SAME adapter as sDAI
+    /// with ZERO new contract code. Registering the vault address is all it takes to support Morpho.
+    function test_morpho_metamorpho_deposit_redeem() public onFork {
+        deal(USDC, address(account), 10_000e6);
+
+        _run(_dep(morphoId, 4_000e6));
+        assertGt(IERC4626(MORPHO_STEAKHOUSE_USDC).balanceOf(address(account)), 0, "received MetaMorpho shares");
+        assertEq(IERC20(USDC).balanceOf(address(account)), 6_000e6, "4k USDC deposited to Morpho vault");
+
+        vm.prank(owner);
+        account.exit(morphoId, type(uint256).max);
+        assertEq(IERC4626(MORPHO_STEAKHOUSE_USDC).balanceOf(address(account)), 0, "all Morpho shares redeemed");
+        assertGe(IERC20(USDC).balanceOf(address(account)), 9_999e6, "USDC back to idle (>= principal)");
     }
 
     /// Real Uniswap V3: swap USDC -> DAI through the account's opaque-routeData swap adapter, bounded by minOut.
