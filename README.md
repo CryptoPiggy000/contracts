@@ -38,5 +38,11 @@ forge test         # 30 tests, fully local (mock protocols — no fork/RPC neede
 forge fmt          # format
 ```
 
+## Local demo
+
+`demo/` is a single-page dApp that drives these contracts on a local anvil — deploy
+`script/DeployLocal.s.sol`, serve `demo/`, and click through deposit / earn / swap / withdraw (plus a
+"platform tries to drain me" button that reverts `NotOwner`). See [`demo/README.md`](demo/README.md).
+
 Tests use mock protocols (`test/mocks/`) so the whole suite runs anywhere, including a red-team test
 proving an *approved* malicious router still cannot drain an account.

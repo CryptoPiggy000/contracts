@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>CryptoPiggy — local dApp</title>
+<style>
+  :root{
+    --ground:#e9edf3;--panel:#fff;--panel-2:#f3f6fa;--ink:#111722;--ink-2:#4a586e;--ink-3:#7d899c;
+    --line:#d4dbe6;--pure:#3d55c8;--pure-soft:#edf0ff;--pure-line:#c4cef5;--shell:#a2661c;--shell-soft:#fbf2e2;--shell-line:#ead2a4;
+    --chain:#0c7f7b;--chain-soft:#e3f4f2;--chain-line:#a9dcd7;--danger:#c0392b;--danger-soft:#fbeae7;--danger-line:#e6c3bc;
+    --accent:#0c7f7b;--on-accent:#fff;--shadow:0 1px 2px rgba(17,23,34,.05),0 10px 30px rgba(17,23,34,.07);
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+  }
+  @media(prefers-color-scheme:dark){:root{--ground:#070a11;--panel:#0e1521;--panel-2:#121b2a;--ink:#e8eef7;--ink-2:#9aa8bf;--ink-3:#68758d;--line:#22304a;--pure:#879bff;--pure-soft:#141d36;--pure-line:#33406e;--shell:#e3a251;--shell-soft:#241c10;--shell-line:#57451f;--chain:#34c9be;--chain-soft:#0e2320;--chain-line:#1f5a54;--danger:#ef6a55;--danger-soft:#2a1512;--danger-line:#5a2820;--accent:#34c9be;--on-accent:#04201d;--shadow:0 1px 2px rgba(0,0,0,.4),0 12px 36px rgba(0,0,0,.5);}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1120px;margin:0 auto;padding:26px 18px 60px}
+  .top{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-3);display:flex;align-items:center;gap:9px}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--ink-3)}
+  .dot.up{background:var(--chain);box-shadow:0 0 0 4px color-mix(in srgb,var(--chain) 20%,transparent)}
+  .dot.down{background:var(--danger)}
+  h1{font-size:clamp(1.4rem,3vw,2rem);margin:.5em 0 .3em;font-weight:800;letter-spacing:-.02em}
+  h1 em{font-style:normal;color:var(--accent)}
+  .lede{max-width:70ch;color:var(--ink-2);margin:0;font-size:.98rem}
+  .lede code{font-family:var(--mono);font-size:.86em;background:var(--panel-2);padding:.05em .35em;border-radius:4px;border:1px solid var(--line)}
+  .mini{font-family:var(--mono);font-size:12px;color:var(--ink-2);cursor:pointer;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 11px}
+  .mini:hover{border-color:var(--accent);color:var(--ink)}
+  .faucet{background:var(--accent);color:var(--on-accent);border-color:var(--accent);font-weight:700}
+  .faucet:hover{background:var(--accent);color:var(--on-accent);border-color:var(--accent);filter:brightness(1.06)}
+  .faucet:disabled{opacity:.5;cursor:progress}
+  .title-row{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
+  .stage{display:grid;grid-template-columns:1fr;gap:14px;margin-top:24px}
+  @media(min-width:880px){.stage{grid-template-columns:1.1fr .9fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:15px 16px}
+  .card .h{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin-bottom:12px}
+  .acct{border:2px solid var(--chain);box-shadow:0 0 0 4px color-mix(in srgb,var(--chain) 9%,transparent),var(--shadow)}
+  .addr{font-family:var(--mono);font-size:11px;color:var(--ink-2);margin-bottom:12px;word-break:break-all}
+  .addr b{color:var(--chain)}
+  .buckets{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .bk{border:1px solid var(--line);border-radius:10px;padding:9px 11px;background:var(--panel-2)}
+  .bk.held{border-color:var(--shell-line)} .bk.dep{border-color:var(--pure-line)} .bk.wal{border-style:dashed}
+  .bk .t{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);display:flex;justify-content:space-between}
+  .bk.held .t{color:var(--shell)} .bk.dep .t{color:var(--pure)}
+  .r{display:flex;justify-content:space-between;font-family:var(--mono);font-size:13px;margin-top:5px}
+  .r .amt{font-weight:700;font-variant-numeric:tabular-nums}
+  .r.z .amt{color:var(--ink-3);font-weight:400}
+  .head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}
+  .hl-lbl{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
+  .hl-addr{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--chain);margin-top:3px}
+  .hl-acct{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);margin-top:3px}
+  .head-r{text-align:right}
+  .hl-num{font-size:clamp(1.7rem,4.5vw,2.4rem);font-weight:800;letter-spacing:-.02em;margin-top:1px;font-variant-numeric:tabular-nums}
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+  .sp{border:1px solid var(--line);border-radius:10px;padding:9px 12px;display:flex;flex-direction:column;gap:4px}
+  .sp-l{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);display:flex;align-items:center;gap:6px}
+  .sp-l::before{content:"";width:7px;height:7px;border-radius:50%;flex:none}
+  .sp.earning .sp-l::before{background:var(--pure)}
+  .sp.held .sp-l::before{background:var(--chain)}
+  .sp-v{font-size:1.1rem;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+  .acc{margin-top:15px;border-top:1px solid var(--line);padding-top:11px}
+  .acc>summary{font-family:var(--mono);font-size:12px;color:var(--ink-2);cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between}
+  .acc>summary::-webkit-details-marker{display:none}
+  .acc[open] .caret{transform:rotate(180deg)}
+  .caret{transition:.15s;color:var(--ink-3)}
+  .alloc{margin-top:12px;display:flex;flex-direction:column;gap:10px}
+  .al-empty{font-family:var(--mono);font-size:12px;color:var(--ink-3)}
+  .al-top{display:flex;justify-content:space-between;gap:10px;font-family:var(--mono);font-size:12.5px}
+  .al-nm{color:var(--ink);font-weight:600}.al-sub{color:var(--ink-3);font-weight:400;font-size:11px}
+  .al-v{color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .al-bar{height:6px;border-radius:3px;background:var(--panel-2);margin-top:5px;overflow:hidden}
+  .al-bar>div{height:100%;border-radius:3px}
+  .al.deployed .al-bar>div{background:var(--pure)}.al.held .al-bar>div{background:var(--shell)}.al.idle .al-bar>div{background:var(--chain)}
+  .al-tag{font-family:var(--mono);font-size:9px;letter-spacing:.09em;text-transform:uppercase;font-weight:700;color:var(--ink-2);background:var(--panel-2);padding:2px 7px 2px 6px;border-radius:999px;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;vertical-align:middle}
+  .al-tag::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--ink-3)}
+  .al.deployed .al-tag::before{background:var(--pure)}.al.held .al-tag::before{background:var(--shell)}.al.idle .al-tag::before{background:var(--chain)}
+  .wl{margin-top:13px;border-top:1px dashed var(--line);padding-top:9px;font-family:var(--mono);font-size:11.5px;color:var(--ink-3)}
+  .wl b{color:var(--ink-2)}.wl-n{color:var(--ink-3)}
+  .agrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .agt{grid-column:1/-1;font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin:12px 2px 6px}
+  button.act{font-family:var(--sans);font-size:13px;font-weight:600;text-align:left;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:9px 11px;cursor:pointer;display:flex;flex-direction:column;gap:2px}
+  button.act:hover:not(:disabled){border-color:var(--accent);background:var(--panel-2)}
+  button.act:disabled{opacity:.45;cursor:progress}
+  button.act .s{font-family:var(--mono);font-size:10px;color:var(--ink-3)}
+  button.act.danger{border-color:var(--danger-line);background:var(--danger-soft)} button.act.danger .s{color:var(--danger)}
+  button.act.plan{border-color:var(--accent)}
+  button.act.plan-go{border-color:var(--pure);background:var(--pure-soft);color:var(--pure)} button.act.plan-go .s{color:var(--pure)}
+  .planbox{border:1px solid var(--pure-line);background:var(--pure-soft);border-radius:11px;padding:12px 13px;display:flex;flex-direction:column;gap:9px}
+  .pl-h{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--pure);font-weight:700}
+  .pl-h2{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);font-weight:700;margin-top:2px}
+  .pl-targets{display:flex;flex-wrap:wrap;gap:6px}
+  .pt{font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--ink-2)}
+  .pt.earning{color:var(--pure);border-color:var(--pure-line)}.pt.held{color:var(--shell);border-color:var(--shell-line)}.pt.idle{color:var(--chain);border-color:var(--chain-line)}
+  .pl-steps{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:4px}
+  .pl-steps li{font-family:var(--mono);font-size:11.5px;color:var(--ink-2);display:flex;gap:8px}
+  .pl-steps .kk{color:var(--pure);font-weight:700;min-width:70px;flex:none}
+  .pl-note{font-family:var(--mono);font-size:11.5px;color:var(--ink-2)}
+  .log{margin-top:14px;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+  .log .lh{padding:10px 14px;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
+  .log .b{max-height:260px;overflow:auto;padding:8px 14px;font-family:var(--mono);font-size:12px;display:flex;flex-direction:column-reverse}
+  .le{padding:6px 0;border-top:1px solid var(--line)}.le:last-child{border-top:0}
+  .le .bd{font-weight:700;font-size:10px;margin-right:6px}
+  .le.ok .bd{color:var(--chain)} .le.rv .bd{color:var(--danger)} .le.rv .c{color:var(--danger)}
+  .le .p{color:var(--ink-3);font-size:11px;margin-top:2px;word-break:break-word}
+  .le .k{color:var(--accent)}
+  .banner{margin-top:14px;border:1px solid var(--danger-line);background:var(--danger-soft);border-radius:12px;padding:12px 14px;font-size:13px;color:var(--ink-2)}
+  .banner code{font-family:var(--mono);font-size:.86em}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="eyebrow"><span class="dot" id="conn"></span><span id="connt">connecting to anvil…</span></div>
+    <button class="mini" id="reload">↻ Refresh</button>
+  </div>
+  <div class="title-row">
+    <h1>CryptoPiggy — <em>local dApp</em></h1>
+    <button class="mini faucet" id="faucetTop">＋ Get 1000 test USDC</button>
+  </div>
+  <p class="lede">A real single-page app talking to your local <code>anvil</code> node. Every button sends an actual transaction to the deployed contracts (as anvil account&nbsp;#0, the owner). Watch funds move; then try to make the <b>platform</b> steal.</p>
+
+  <div id="err" class="banner" style="display:none"></div>
+
+  <div class="stage">
+    <div class="card acct">
+      <div class="head">
+        <div class="head-l">
+          <div class="hl-lbl">Owner wallet</div>
+          <div class="hl-addr" id="ownerAddr">—</div>
+          <div class="hl-acct" id="acctAddr">account —</div>
+        </div>
+        <div class="head-r">
+          <div class="hl-lbl">Total asset value</div>
+          <div class="hl-num" id="totalVal">$0</div>
+        </div>
+      </div>
+      <div class="split">
+        <div class="sp earning"><div class="sp-l">Allocated · earning</div><div class="sp-v" id="spAllocated">$0</div></div>
+        <div class="sp held"><div class="sp-l">Held · not deployed</div><div class="sp-v" id="spHeld">$0</div></div>
+      </div>
+      <details class="acc">
+        <summary>Assets &amp; allocation<span class="caret">▾</span></summary>
+        <div class="alloc" id="alloc"></div>
+        <div class="wl" id="walletLine"></div>
+      </details>
+    </div>
+
+    <div class="card">
+      <div class="h">Actions — real transactions</div>
+      <div class="agrid" id="actions">
+        <div class="agt">Planner — preview, then execute</div>
+        <button class="act plan" data-a="runPlanner" style="grid-column:1/-1"><span>▶ Run Planner</span><span class="s">the engine builds a Plan + Actions from your idle cash — you dispatch it</span></button>
+        <div id="planPreview" class="planbox" style="grid-column:1/-1;display:none"></div>
+        <div class="agt">Deploy &amp; rebalance (executePlan)</div>
+        <button class="act" data-a="depAave"><span>Supply 400 → Aave</span><span class="s">DEPOSIT</span></button>
+        <button class="act" data-a="swapHeld"><span>Add wstETH exposure</span><span class="s">250 USDC → held</span></button>
+        <button class="act" data-a="swapVault"><span>Move 300 into the Vault</span><span class="s">stable savings (ERC-4626)</span></button>
+        <button class="act" data-a="rebalance"><span>Rebalance (1 plan)</span><span class="s">WITHDRAW+SWAP+DEPOSIT</span></button>
+        <div class="agt">Exit &amp; withdraw</div>
+        <button class="act" data-a="exitAave"><span>Exit Aave → idle</span><span class="s">exit(aave, MAX)</span></button>
+        <button class="act" data-a="withdraw"><span>Withdraw 100 → wallet</span><span class="s">withdraw(USDC, 100)</span></button>
+        <div class="agt">Custody</div>
+        <button class="act danger" data-a="rug"><span>🦹 Platform: drain me</span><span class="s">executePlan as acct #1</span></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="log"><div class="lh">Activity Log · what got done (incl. the swap router)</div><div class="b" id="logb"></div></div>
+</div>
+
+<script type="module">
+import {createPublicClient, createWalletClient, http, parseAbi, encodeFunctionData, parseUnits, formatUnits}
+  from "https://esm.sh/viem@2.21.55";
+import {privateKeyToAccount} from "https://esm.sh/viem@2.21.55/accounts";
+
+const RPC = "http://127.0.0.1:8545";
+// Deterministic addresses from a FRESH anvil + `forge script DeployLocal`.
+const A = {
+  registry:"0x0165878A594ca255338adfa4d48449f69242Eb8F",
+  factory: "0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6",
+  usdc:    "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+  usds:    "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
+  wsteth:  "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
+  aave:    "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
+  vault:   "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
+  router:  "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707",
+};
+// anvil well-known dev keys (LOCAL ONLY — never use anywhere real)
+const KEY0="0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"; // you (owner)
+const KEY1="0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"; // "platform" (not owner)
+const SALT="0x0000000000000000000000000000000000000000000000000000000000000001";
+const Z="0x0000000000000000000000000000000000000000";
+const ZB="0x0000000000000000000000000000000000000000000000000000000000000000";
+const anvil={id:31337,name:"Anvil",nativeCurrency:{name:"Ether",symbol:"ETH",decimals:18},rpcUrls:{default:{http:[RPC]}}};
+
+const R=A.router.slice(0,6)+"…"+A.router.slice(-4); // the swap router — infra, shown only in the Activity Log
+const you=privateKeyToAccount(KEY0), platform=privateKeyToAccount(KEY1);
+const pub=createPublicClient({chain:anvil,transport:http(RPC)});
+const wYou=createWalletClient({account:you,chain:anvil,transport:http(RPC)});
+const wPlat=createWalletClient({account:platform,chain:anvil,transport:http(RPC)});
+
+const factoryAbi=parseAbi(["function createAccount(bytes32) returns (address)","function predict(address,bytes32) view returns (address)"]);
+const registryAbi=parseAbi(["function positionId(uint8,address,address) view returns (bytes32)"]);
+const erc20Abi=parseAbi(["function balanceOf(address) view returns (uint256)","function mint(address,uint256)"]);
+const aaveAbi=parseAbi(["function supplied(address,address) view returns (uint256)"]);
+const vaultAbi=parseAbi(["function balanceOf(address) view returns (uint256)","function convertToAssets(uint256) view returns (uint256)"]);
+const routerAbi=parseAbi(["function swap(address,address,uint256,uint256,address)"]);
+const acctAbi=parseAbi([
+  "struct Action {uint8 kind; bytes32 positionId; address assetIn; address assetOut; address router; uint256 amount; uint256 minOut; bytes routeData;}",
+  "function executePlan(Action[] plan)",
+  "function exit(bytes32,uint256)",
+  "function withdraw(address,uint256)",
+  "function owner() view returns (address)",
+  "error NotOwner()","error AlreadyInitialized()","error ZeroAddress()","error PositionNotActive()",
+  "error UnknownPosition()","error BadAdapter()","error RouteNotApproved()","error AssetNotApproved()",
+  "error SwapFailed()","error InsufficientOutput()"
+]);
+
+let ACCT, AAVE_ID, VAULT_ID, LOG=[], busy=false, PLAN=null;
+const U=(v)=>parseUnits(v,18);
+const f=(x)=>{const n=Number(formatUnits(x,18));return n===0?"0":n.toLocaleString(undefined,{maximumFractionDigits:4});};
+const $=(id)=>document.getElementById(id);
+
+function conn(up,txt){const d=$("conn");d.className="dot "+(up?"up":"down");$("connt").textContent=txt;}
+function addLog(ok,call,path){LOG.push({ok,call,path});renderLog();}
+function renderLog(){$("logb").innerHTML=LOG.map(e=>`<div class="le ${e.ok?"ok":"rv"}"><span class="bd">${e.ok?"✓":"✗"}</span><span class="c">${e.call}</span>${e.path?`<div class="p">${e.path}</div>`:""}</div>`).join("");}
+function errName(e){let c=e;while(c){if(c.data&&c.data.errorName)return c.data.errorName;if(c.errorName)return c.errorName;c=c.cause;}return (e.shortMessage||e.message||"error").split("\n")[0];}
+
+const PRICE={USDC:1,USDS:1,wstETH:2500}; // demo prices (wstETH from the 1 USDC = 0.0004 rate)
+const usd=(x)=>Number(formatUnits(x,18)); // raw parse — f() adds thousands separators that break Number()
+async function refresh(){
+  const [iu,is,hw,sa,vs,wu,ww]=await Promise.all([
+    pub.readContract({address:A.usdc,abi:erc20Abi,functionName:"balanceOf",args:[ACCT]}),
+    pub.readContract({address:A.usds,abi:erc20Abi,functionName:"balanceOf",args:[ACCT]}),
+    pub.readContract({address:A.wsteth,abi:erc20Abi,functionName:"balanceOf",args:[ACCT]}),
+    pub.readContract({address:A.aave,abi:aaveAbi,functionName:"supplied",args:[ACCT,A.usdc]}),
+    pub.readContract({address:A.vault,abi:vaultAbi,functionName:"balanceOf",args:[ACCT]}),
+    pub.readContract({address:A.usdc,abi:erc20Abi,functionName:"balanceOf",args:[you.address]}),
+    pub.readContract({address:A.wsteth,abi:erc20Abi,functionName:"balanceOf",args:[you.address]}),
+  ]);
+  const va = vs===0n?0n:await pub.readContract({address:A.vault,abi:vaultAbi,functionName:"convertToAssets",args:[vs]});
+  const items=[
+    {nm:"Aave · USDC", bk:"deployed", v:usd(sa)},
+    {nm:"Vault · USDS", bk:"deployed", v:usd(va)},
+    {nm:"wstETH", bk:"held", v:usd(hw)*PRICE.wstETH, sub:f(hw)+" wstETH"},
+    {nm:"USDC", bk:"idle", v:usd(iu)},
+    {nm:"USDS", bk:"idle", v:usd(is)},
+  ];
+  const total=items.reduce((s,x)=>s+x.v,0);
+  const allocated=items.filter(x=>x.bk==="deployed").reduce((s,x)=>s+x.v,0), held=total-allocated;
+  const money=(n)=>"$"+n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+  $("ownerAddr").textContent=you.address.slice(0,6)+"…"+you.address.slice(-4)+" (anvil #0)";
+  $("acctAddr").textContent="account "+ACCT.slice(0,6)+"…"+ACCT.slice(-4);
+  $("totalVal").textContent=money(total);
+  $("spAllocated").textContent=money(allocated);
+  $("spHeld").textContent=money(held);
+  const shown=items.filter(x=>x.v>1e-6).sort((a,b)=>b.v-a.v);
+  const TAG={deployed:"Earning",held:"Held",idle:"Idle"};
+  $("alloc").innerHTML = shown.length ? shown.map(x=>{
+    const pct=total>0?x.v/total*100:0;
+    return `<div class="al ${x.bk}"><div class="al-top"><span class="al-nm">${x.nm}${x.sub?` <span class="al-sub">${x.sub}</span>`:""} <span class="al-tag">${TAG[x.bk]}</span></span><span class="al-v">$${x.v.toLocaleString(undefined,{maximumFractionDigits:2})} · ${pct.toFixed(0)}%</span></div><div class="al-bar"><div style="width:${pct.toFixed(1)}%"></div></div></div>`;
+  }).join("") : `<div class="al-empty">No assets yet — click “Get 1000 test USDC” to begin.</div>`;
+  $("walletLine").innerHTML = `Owner wallet holds <b>${f(wu)} USDC</b>${usd(ww)>0?` · <b>${f(ww)} wstETH</b>`:""} <span class="wl-n">— where withdrawals land</span>`;
+}
+
+// simulate (catch revert) -> write -> wait -> log
+async function tx(who,label,path,req){
+  if(busy)return; busy=true; setBusy(true);
+  const w=who==="platform"?wPlat:wYou, acc=who==="platform"?platform:you;
+  try{
+    await pub.simulateContract({...req,account:acc});
+    const hash=await w.writeContract({...req,account:acc});
+    await pub.waitForTransactionReceipt({hash});
+    addLog(true,label,path);
+  }catch(e){addLog(false,label,"reverted: "+errName(e));}
+  await refresh(); busy=false; setBusy(false);
+}
+function setBusy(b){document.querySelectorAll("button.act,#faucetTop").forEach(x=>x.disabled=b);}
+
+const dep=(id,amt)=>({kind:0,positionId:id,assetIn:Z,assetOut:Z,router:Z,amount:amt,minOut:0n,routeData:"0x"});
+const wd =(id,amt)=>({kind:1,positionId:id,assetIn:Z,assetOut:Z,router:Z,amount:amt,minOut:0n,routeData:"0x"});
+const sw =(i,o,amt,minOut)=>({kind:2,positionId:ZB,assetIn:i,assetOut:o,router:A.router,amount:amt,minOut,
+  routeData:encodeFunctionData({abi:routerAbi,functionName:"swap",args:[i,o,amt,minOut,ACCT]})});
+const plan=(actions)=>({address:ACCT,abi:acctAbi,functionName:"executePlan",args:[actions]});
+
+const ACT={
+  fund:()=>tx("you",'USDC.<span class="k">mint</span>(account, 1000)',"test faucet",
+    {address:A.usdc,abi:erc20Abi,functionName:"mint",args:[ACCT,U("1000")]}),
+  depAave:()=>tx("you",'<span class="k">executePlan</span>([ DEPOSIT aave 400 ])',"idle USDC → Aave.supply",plan([dep(AAVE_ID,U("400"))])),
+  swapHeld:()=>tx("you",'<span class="k">executePlan</span>([ SWAP USDC→wstETH 250 ])',"250 USDC → wstETH via SwapRouter "+R+" · Δ ≥ minOut ✓",plan([sw(A.usdc,A.wsteth,U("250"),U("0.09"))])),
+  swapVault:()=>tx("you",'<span class="k">executePlan</span>([ SWAP USDC→USDS 300, DEPOSIT vault 300 ])',"1) swap 300 USDC → USDS via SwapRouter "+R+"  2) deposit 300 USDS → ERC-4626 Vault",plan([sw(A.usdc,A.usds,U("300"),U("299")),dep(VAULT_ID,U("300"))])),
+  rebalance:()=>tx("you",'<span class="k">executePlan</span>([ WITHDRAW aave 200, SWAP USDC→USDS 200, DEPOSIT vault 200 ])',"one atomic plan: withdraw Aave · swap 200 USDC → USDS via SwapRouter "+R+" · deposit Vault",plan([wd(AAVE_ID,U("200")),sw(A.usdc,A.usds,U("200"),U("199")),dep(VAULT_ID,U("200"))])),
+  exitAave:()=>tx("you",'<span class="k">exit</span>(aave, MAX)',"unwind → idle",{address:ACCT,abi:acctAbi,functionName:"exit",args:[AAVE_ID,2n**256n-1n]}),
+  withdraw:()=>tx("you",'<span class="k">withdraw</span>(USDC, 100)',"→ YOUR wallet (only external door)",{address:ACCT,abi:acctAbi,functionName:"withdraw",args:[A.usdc,U("100")]}),
+  rug:()=>tx("platform",'platform › <span class="k">executePlan</span>([ WITHDRAW aave MAX ])',"the platform is NOT the owner",plan([wd(AAVE_ID,2n**256n-1n)])),
+  runPlanner:()=>runPlanner(),
+  dispatch:async()=>{if(!PLAN)return;await tx("you",PLAN.label,PLAN.path,plan(PLAN.actions));$("planPreview").style.display="none";PLAN=null;},
+};
+
+// The "engine", off-chain: reads your idle cash, produces a Plan (target mix) + real Actions (the route). You dispatch it.
+async function runPlanner(){
+  const iu=await pub.readContract({address:A.usdc,abi:erc20Abi,functionName:"balanceOf",args:[ACCT]});
+  const idle=Number(formatUnits(iu,18));
+  const box=$("planPreview"); box.style.display="block";
+  const money=(n)=>"$"+n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+  if(idle<100){PLAN=null;box.innerHTML=`<div class="pl-h">Planner</div><div class="pl-note">Only ${money(idle)} idle — click <b>Get 1000 test USDC</b> first, then run the planner.</div>`;return;}
+  const aU=+(idle*0.4).toFixed(2), vU=+(idle*0.3).toFixed(2), hU=+(idle*0.2).toFixed(2); // 10% stays idle
+  const hOut=hU*0.0004; // wstETH out at the router rate
+  const actions=[
+    dep(AAVE_ID,U(aU.toString())),
+    sw(A.usdc,A.usds,U(vU.toString()),U((vU*0.99).toFixed(2))), dep(VAULT_ID,U(vU.toString())),
+    sw(A.usdc,A.wsteth,U(hU.toString()),U((hOut*0.9).toFixed(6))),
+  ];
+  PLAN={actions,
+    label:'<span class="k">executePlan</span>([ 4 actions ]) · planner',
+    path:`from ${money(idle)} idle → Aave ${money(aU)} · Vault ${money(vU)} · wstETH ${money(hU)} (${money(idle-aU-vU-hU)} kept idle)`};
+  box.innerHTML=`
+    <div class="pl-h">Plan · deploy your ${money(idle)} idle cash</div>
+    <div class="pl-targets"><span class="pt earning">Aave 40%</span><span class="pt earning">Vault 30%</span><span class="pt held">wstETH 20%</span><span class="pt idle">keep 10% idle</span></div>
+    <div class="pl-h2">Actions · the route the engine built — 4 steps, 1 signature</div>
+    <ol class="pl-steps">
+      <li><span class="kk">DEPOSIT</span><span>${money(aU)} USDC → Aave (lending)</span></li>
+      <li><span class="kk">SWAP</span><span>${money(vU)} USDC → USDS</span></li>
+      <li><span class="kk">DEPOSIT</span><span>${money(vU)} USDS → Vault (ERC-4626)</span></li>
+      <li><span class="kk">SWAP</span><span>${money(hU)} USDC → wstETH (held)</span></li>
+    </ol>
+    <button class="act plan-go" data-a="dispatch"><span>Dispatch plan →</span><span class="s">executePlan( 4 actions ) · you sign</span></button>`;
+}
+
+$("actions").addEventListener("click",e=>{const b=e.target.closest("button[data-a]");if(b&&!b.disabled)ACT[b.dataset.a]();});
+$("reload").onclick=refresh;
+$("faucetTop").onclick=()=>{if(!busy)ACT.fund();};
+
+async function init(){
+  try{
+    ACCT=await pub.readContract({address:A.factory,abi:factoryAbi,functionName:"predict",args:[you.address,SALT]});
+    let owner;
+    try{owner=await pub.readContract({address:ACCT,abi:acctAbi,functionName:"owner"});}catch{owner=Z;}
+    if(owner.toLowerCase()!==you.address.toLowerCase()){
+      const h=await wYou.writeContract({address:A.factory,abi:factoryAbi,functionName:"createAccount",args:[SALT],account:you});
+      await pub.waitForTransactionReceipt({hash:h});
+      addLog(true,'<span class="k">factory.createAccount</span>(salt)',"your account clone deployed + initialized");
+    }
+    [AAVE_ID,VAULT_ID]=await Promise.all([
+      pub.readContract({address:A.registry,abi:registryAbi,functionName:"positionId",args:[2,A.aave,A.usdc]}),
+      pub.readContract({address:A.registry,abi:registryAbi,functionName:"positionId",args:[1,A.vault,A.usds]}),
+    ]);
+    conn(true,"connected · anvil 31337");
+    await refresh();
+  }catch(e){
+    conn(false,"anvil not reachable");
+    $("err").style.display="block";
+    $("err").innerHTML="<b>Can't reach the contracts.</b> Start a fresh anvil and deploy first — see the README. "+
+      "(Then hard-refresh.) If your addresses differ, update the <code>A</code> config in this file.<br><br><code>"+(e.shortMessage||e.message)+"</code>";
+  }
+}
+init();
+</script>
+</body>
+</html>
