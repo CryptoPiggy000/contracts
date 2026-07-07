@@ -41,11 +41,14 @@ contract DeployLocal is Script {
         registry.addAsset(address(wsteth), PositionClass.HELD_ASSET);
         registry.setRoute(address(router), true);
 
-        // --- seed the router with liquidity + rates (1 USDC = 1 USDS; 1 USDC = 0.0004 wstETH) ---
+        // --- seed the router with liquidity + BIDIRECTIONAL rates (so the planner can rebalance) ---
+        usdc.mint(address(router), 1_000_000e18);
         usds.mint(address(router), 1_000_000e18);
         wsteth.mint(address(router), 1_000_000e18);
-        router.setRate(address(usdc), address(usds), 1e18);
-        router.setRate(address(usdc), address(wsteth), 4e14);
+        router.setRate(address(usdc), address(usds), 1e18); // 1 USDC = 1 USDS
+        router.setRate(address(usds), address(usdc), 1e18); // 1 USDS = 1 USDC
+        router.setRate(address(usdc), address(wsteth), 4e14); // 1 USDC = 0.0004 wstETH
+        router.setRate(address(wsteth), address(usdc), 2500e18); // 1 wstETH = 2500 USDC
 
         vm.stopBroadcast();
 

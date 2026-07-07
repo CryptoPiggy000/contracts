@@ -1,0 +1,20 @@
+{
+  "name": "cryptopiggy-demo",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Local anvil demo dApp for the CryptoPiggy contracts (Vite + Svelte + viem).",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^4.0.4",
+    "svelte": "^5.19.0",
+    "vite": "^5.4.11"
+  },
+  "dependencies": {
+    "viem": "^2.21.55"
+  }
+}

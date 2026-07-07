@@ -1,12 +1,12 @@
 # CryptoPiggy contracts — local demo dApp
 
-A single-page app (`index.html`, ~vanilla + [viem](https://viem.sh)) that drives **these contracts**
-on a local [anvil](https://book.getfoundry.sh/anvil/) node. No wallet extension, no testnet — it uses
-anvil's built-in dev accounts, so every button sends a real transaction you can watch land.
+A **Vite + Svelte** single-page app that drives **these contracts** on a local
+[anvil](https://book.getfoundry.sh/anvil/) node using [viem](https://viem.sh). No wallet extension, no
+testnet — it uses anvil's built-in dev accounts, so every button sends a real transaction you can watch land.
 
 It lives here (not in the `web` repo) because it's a **contracts demo**: it deploys the mock protocol
-universe from `../script/DeployLocal.s.sol` and calls the real `SmartInvestmentAccount` /
-`AccountFactory`. The production web app is a separate thing (the `web` repo).
+universe from `../script/DeployLocal.s.sol` and calls the real `SmartInvestmentAccount` / `AccountFactory`.
+The production web app is a separate thing (the `web` repo).
 
 ## Run it (3 terminals)
 
@@ -14,7 +14,8 @@ universe from `../script/DeployLocal.s.sol` and calls the real `SmartInvestmentA
 ```shell
 anvil
 ```
-Restart it fresh each run so the deployed addresses stay deterministic (the app hard-codes them).
+Restart it fresh each run so the deployed addresses stay deterministic (they're baked into
+`src/lib/chain.js`).
 
 **2 · deploy the contracts + mock protocols** (from the repo root, one level up)
 ```shell
@@ -25,32 +26,40 @@ forge script script/DeployLocal.s.sol:DeployLocal \
   --broadcast
 ```
 
-**3 · serve this folder**
+**3 · run the app** (from this folder)
 ```shell
-python3 -m http.server 5173      # from contracts/demo/ (any static server works)
-# open http://localhost:5173
+npm install     # first time only
+npm run dev     # Vite dev server on http://localhost:5173
 ```
 
 ## What you'll see
 
-The app creates your account once, then each button is a live tx:
+- **Account card** — headline owner wallet + total value; a **Held / Allocated** split; an
+  **Assets & allocation** accordion where each holding is tagged idle / held / earning (with the protocol named).
+- **Planner** — the off-chain "engine": **Run Planner** reads your state and returns a **Plan** (goal,
+  reasoning, target mix, action list, gas estimate). With idle cash it produces a **deploy** plan (fixed
+  30 / 40 / 30); with none left it produces a **rebalance** plan (random target, demo). **Dispatch** submits
+  it as one real `executePlan(...)` — you sign, non-custodial. It re-plans after every state change.
+- **Manual actions** — direct protocol calls (supply / swap / rebalance / exit / withdraw), plus a
+  **🦹 Platform: drain me** button that reverts **`NotOwner`** — the custody guarantee, live.
+- **Activity Log** — every transaction, including the otherwise-hidden swap router.
 
-- **Get 1000 test USDC** → 1000 USDC lands **idle** in the account.
-- **Supply → Aave**, **Add wstETH exposure**, **Move into the Vault**, **Rebalance (1 plan)** — funds
-  move between **idle · held · earning**, each an `executePlan(...)`. The account card headline shows
-  the owner wallet + total value; the **Assets & allocation** accordion shows where each deposit sits
-  (idle / held / earning, with the protocol named).
-- **Exit** / **Withdraw** — back to idle, then out to **your wallet** (the only external door).
-- **🦹 Platform: drain me** → `executePlan` from a *different* account → reverts **`NotOwner`**. That's
-  the custody guarantee, live.
+## Build a static bundle
 
-The swap router is intentionally kept out of the headline UI — it's transport, not a destination — and
-surfaces only in the **Activity Log**.
+```shell
+npm run build      # -> dist/  (serve with any static server, still points at localhost:8545)
+```
+
+## Architecture
+
+- `src/lib/chain.js` — viem clients, deployed addresses, ABIs, helpers.
+- `src/lib/state.js` — reactive stores + all chain logic (connect, refresh, execute, planner).
+- `src/components/*.svelte` — AccountCard · PlannerCard · ManualActions · ActivityLog.
 
 ## Addresses
 
-The deterministic fresh-anvil addresses are baked into the `A` config in `index.html`. If you change
-the deploy order (or don't restart anvil fresh), update `A` with the addresses the deploy script prints.
+The deterministic fresh-anvil addresses are in the `A` map in `src/lib/chain.js`. If you change the deploy
+order (or don't restart anvil fresh), update `A` with the addresses the deploy script prints.
 
 ## Safety
 
