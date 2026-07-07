@@ -289,6 +289,67 @@ contract SmartInvestmentAccountTest is Test {
         assertEq(usdc.allowance(address(acct), address(evil)), 0);
     }
 
+    // ------------------------------------------------------------------ more sad paths
+
+    // a router whose call REVERTS (vs under-delivers) surfaces as SwapFailed; the whole plan rolls back
+    function test_swap_routerReverts_swapFailed() public {
+        RevertingRouter down = new RevertingRouter();
+        vm.prank(admin);
+        registry.setRoute(address(down), true);
+
+        Action[] memory plan = new Action[](1);
+        plan[0] = Action({
+            kind: ActionKind.SWAP,
+            positionId: bytes32(0),
+            assetIn: address(usdc),
+            assetOut: address(wsteth),
+            router: address(down),
+            amount: 10e18,
+            minOut: 0,
+            routeData: abi.encodeWithSelector(
+                RevertingRouter.swap.selector, address(usdc), address(wsteth), uint256(10e18), uint256(0), address(acct)
+            )
+        });
+        vm.prank(user);
+        vm.expectRevert(SmartInvestmentAccount.SwapFailed.selector);
+        acct.executePlan(plan);
+
+        assertEq(usdc.balanceOf(address(acct)), START); // nothing moved
+        assertEq(usdc.allowance(address(acct), address(down)), 0); // no dangling approval
+    }
+
+    // exit of a position that was never registered -> UnknownPosition (status-independent path)
+    function test_exit_unknownPosition_reverts() public {
+        vm.prank(user);
+        vm.expectRevert(SmartInvestmentAccount.UnknownPosition.selector);
+        acct.exit(bytes32("ghost"), 1);
+    }
+
+    // a WITHDRAW action against an unregistered position -> UnknownPosition
+    function test_withdrawAction_unknownPosition_reverts() public {
+        Action[] memory plan = new Action[](1);
+        plan[0] = _wd(bytes32("ghost"), 1);
+        vm.prank(user);
+        vm.expectRevert(SmartInvestmentAccount.UnknownPosition.selector);
+        acct.executePlan(plan);
+    }
+
+    // a malicious APPROVED vault that re-enters executePlan mid-deposit is rejected: onlyOwner fires on the
+    // callback (the vault is not the owner) before nonReentrant is even reached, and the whole plan reverts.
+    function test_reentrancy_maliciousVault_blocked() public {
+        ReentrantVault evil = new ReentrantVault(address(acct), aaveId);
+        vm.prank(admin);
+        bytes32 evilId = registry.addProtocol(AdapterType.ERC4626, address(evil), address(usdc), "savings");
+
+        Action[] memory plan = new Action[](1);
+        plan[0] = _dep(evilId, 100e18);
+        vm.prank(user);
+        vm.expectRevert(SmartInvestmentAccount.NotOwner.selector);
+        acct.executePlan(plan);
+
+        assertEq(usdc.balanceOf(address(acct)), START); // the reentrant attempt moved nothing
+    }
+
     // ------------------------------------------------------------------ fuzz: deposit then full exit
     function testFuzz_depositExit_aave(uint256 amount) public {
         amount = bound(amount, 1, START);
@@ -297,5 +358,33 @@ contract SmartInvestmentAccountTest is Test {
         vm.prank(user);
         acct.exit(aaveId, type(uint256).max);
         assertEq(usdc.balanceOf(address(acct)), START);
+    }
+}
+
+/// A router whose swap reverts outright — the account should surface SwapFailed (the call returned ok=false).
+contract RevertingRouter {
+    function swap(address, address, uint256, uint256, address) external pure {
+        revert("router down");
+    }
+}
+
+/// A malicious ERC-4626 that re-enters executePlan during deposit. The reentrant caller is the vault, not the
+/// owner, so onlyOwner rejects it (nonReentrant sits behind that as defense-in-depth) and the plan reverts.
+contract ReentrantVault {
+    address private immutable acct;
+    bytes32 private immutable id;
+
+    constructor(address acct_, bytes32 id_) {
+        acct = acct_;
+        id = id_;
+    }
+
+    function deposit(uint256, address) external returns (uint256) {
+        Action[] memory p = new Action[](1);
+        p[0].kind = ActionKind.WITHDRAW;
+        p[0].positionId = id;
+        p[0].amount = 1;
+        SmartInvestmentAccount(acct).executePlan(p); // re-enter -> reverts
+        return 0;
     }
 }
