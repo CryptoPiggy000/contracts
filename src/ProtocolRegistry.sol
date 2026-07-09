@@ -21,6 +21,7 @@ contract ProtocolRegistry is Ownable2Step {
     error UnknownPosition();
 
     mapping(bytes32 positionId => ProtocolPosition) private _positions;
+    bytes32[] private _positionIds; // append-only; enables off-chain enumeration (the indexer)
     mapping(address token => Asset) private _assets;
     mapping(address router => bool approved) public routeApproved;
 
@@ -51,6 +52,7 @@ contract ProtocolRegistry is Ownable2Step {
         if (adapterType != AdapterType.ERC4626 && adapterType != AdapterType.AAVE) revert BadAdapter();
         if (target == address(0) || asset == address(0)) revert ZeroAddress();
         id = positionId(adapterType, target, asset);
+        if (_positions[id].target == address(0)) _positionIds.push(id); // first insert only
         _positions[id] = ProtocolPosition(adapterType, target, asset, category, Status.ACTIVE);
         emit ProtocolAdded(id, adapterType, target, asset, category);
     }
@@ -64,6 +66,17 @@ contract ProtocolRegistry is Ownable2Step {
 
     function getProtocol(bytes32 id) external view returns (ProtocolPosition memory) {
         return _positions[id];
+    }
+
+    /// @notice Total number of registered positions (active + disabled; never deleted).
+    function positionCount() external view returns (uint256) {
+        return _positionIds.length;
+    }
+
+    /// @notice All registered position ids, in insertion order — lets an off-chain indexer
+    ///         discover every venue without needing to know ids up front.
+    function allPositionIds() external view returns (bytes32[] memory) {
+        return _positionIds;
     }
 
     // ----------------------------------------------------------------- approved assets
