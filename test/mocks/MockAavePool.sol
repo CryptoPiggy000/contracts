@@ -19,10 +19,12 @@ contract MockAavePool {
         deployedAt = block.timestamp;
     }
 
-    /// @notice Aave-style RAY liquidity index, accruing linearly at APR_BPS since deploy. LOCAL MOCK
-    ///         ONLY — a real pool's index is driven by borrower interest. Lets the indexer observe a
-    ///         non-flat index (and thus a real APY) as chain time advances.
-    function liquidityIndex(address) external view returns (uint256) {
+    /// @notice Mirrors Aave V3 Pool.getReserveNormalizedIncome: the reserve's RAY liquidity index
+    ///         accrued to now. LOCAL MOCK ONLY — accrues linearly at APR_BPS since deploy (a real
+    ///         pool's index is driven by borrower interest). Lets the indexer observe a non-flat
+    ///         index (and thus a real APY) as chain time advances. Same signature as real Aave, so
+    ///         the engine's AaveReader reads this mock and a real pool identically.
+    function getReserveNormalizedIncome(address) external view returns (uint256) {
         uint256 elapsed = block.timestamp - deployedAt;
         return RAY + (RAY * APR_BPS * elapsed) / (10_000 * 365 days);
     }
