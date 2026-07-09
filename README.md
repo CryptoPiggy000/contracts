@@ -30,6 +30,35 @@ Adapters live **inside** the account (smallest trust surface). Three for the POC
 
 Design rationale: `../product-overview/10-revised-architecture.md` (in the umbrella repo).
 
+## Live on Ethereum Sepolia (chainId 11155111)
+
+Deployed via `script/DeploySepolia.s.sol` (this branch). **Real Circle USDC** is the stablecoin;
+the Aave pool and ERC-4626 vault are **mocks, both over USDC** (no swaps, clean 6-dec). The real
+registry/impl/factory are the audited/tested ones — only the yield venues are mocks. **Mocks don't
+accrue**, so this proves real on-chain money movement (deposit / earn / close / withdraw), not real
+yield. Full record + notes: [`DEPLOYMENTS.md`](./DEPLOYMENTS.md).
+
+| Contract | Address |
+|---|---|
+| `AccountFactory` | `0xEfeeD7E0FB70316E9ceaeDcB1dBB10907370567C` |
+| `ProtocolRegistry` | `0xe7F24D9963d992b2d3b838c615d41E94Ca8F8bd1` |
+| `SmartInvestmentAccount` (impl) | `0xd06F148d8fe1F8eb3F145AA30BE6dAd7347627Ab` |
+| Mock Aave pool (USDC) | `0x5c631226d0467ff2C15065b7173383278A639bb8` |
+| Mock ERC-4626 vault (USDC) | `0xc6fA7dc154218b6d7bB81fc19530D16D16778b9E` |
+| USDC (Circle, real) | `0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238` |
+
+**How the frontend uses it** (matches the suggestion-only engine model): the client derives the
+piggy address with `AccountFactory.predict(owner, 0x0)`, the user funds it with USDC, then the
+**client builds the `Action[]` and the user signs `executePlan` / `exit` / `withdraw` themselves** —
+no server touches the funds. positionId = `keccak256(abi.encode(adapterType, target, USDC))`.
+Verified end-to-end on Sepolia: `createAccount` → `executePlan` (DEPOSIT) → `exit` → `withdraw`.
+
+Redeploy (needs a funded deployer key in `.env` as `PRIVATE_KEY`):
+```shell
+set -a; . .env; set +a
+forge script script/DeploySepolia.s.sol:DeploySepolia --rpc-url <sepolia> --broadcast
+```
+
 ## Develop
 
 ```shell
