@@ -1,0 +1,7 @@
+#!/usr/bin/env sh
+# Auto-format staged Solidity with `forge fmt` before commit.
+# Enable once per clone: `git config core.hooksPath .githooks`. See docs/CONVENTIONS.md.
+staged=$(git diff --cached --name-only --diff-filter=ACM -- '*.sol')
+[ -z "$staged" ] && exit 0
+forge fmt $staged
+git add $staged

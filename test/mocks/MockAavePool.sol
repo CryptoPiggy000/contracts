@@ -9,7 +9,25 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 contract MockAavePool {
     using SafeERC20 for IERC20;
 
+    uint256 private constant RAY = 1e27;
+    uint256 private constant APR_BPS = 1500; // 15%/yr mock yield — gives the engine a real, positive rate
+    uint256 private immutable deployedAt;
+
     mapping(address user => mapping(address asset => uint256)) public supplied;
+
+    constructor() {
+        deployedAt = block.timestamp;
+    }
+
+    /// @notice Mirrors Aave V3 Pool.getReserveNormalizedIncome: the reserve's RAY liquidity index
+    ///         accrued to now. LOCAL MOCK ONLY — accrues linearly at APR_BPS since deploy (a real
+    ///         pool's index is driven by borrower interest). Lets the indexer observe a non-flat
+    ///         index (and thus a real APY) as chain time advances. Same signature as real Aave, so
+    ///         the engine's AaveReader reads this mock and a real pool identically.
+    function getReserveNormalizedIncome(address) external view returns (uint256) {
+        uint256 elapsed = block.timestamp - deployedAt;
+        return RAY + (RAY * APR_BPS * elapsed) / (10_000 * 365 days);
+    }
 
     function supply(address asset, uint256 amount, address onBehalfOf, uint16) external {
         IERC20(asset).safeTransferFrom(msg.sender, address(this), amount);

@@ -92,6 +92,36 @@ contract ProtocolRegistryTest is Test {
         vm.stopPrank();
     }
 
+    function test_allPositionIds_enumerates_added_protocols() public {
+        address target2 = makeAddr("target2");
+        address asset2 = makeAddr("asset2");
+        bytes32 id1 = reg.positionId(AdapterType.AAVE, target, asset);
+        bytes32 id2 = reg.positionId(AdapterType.ERC4626, target2, asset2);
+
+        vm.startPrank(admin);
+        reg.addProtocol(AdapterType.AAVE, target, asset, "lending");
+        reg.addProtocol(AdapterType.ERC4626, target2, asset2, "savings");
+        vm.stopPrank();
+
+        assertEq(reg.positionCount(), 2);
+        bytes32[] memory ids = reg.allPositionIds();
+        assertEq(ids.length, 2);
+        assertEq(ids[0], id1);
+        assertEq(ids[1], id2);
+    }
+
+    function test_allPositionIds_keeps_disabled_ids() public {
+        vm.startPrank(admin);
+        reg.addProtocol(AdapterType.AAVE, target, asset, "lending");
+        bytes32 id = reg.positionId(AdapterType.AAVE, target, asset);
+        reg.disableProtocol(id);
+        vm.stopPrank();
+
+        // disabled is never deleted -> still enumerable, so the indexer keeps sampling it
+        assertEq(reg.positionCount(), 1);
+        assertEq(reg.allPositionIds()[0], id);
+    }
+
     function test_ownershipTwoStep() public {
         address newAdmin = makeAddr("newAdmin");
         vm.prank(admin);
