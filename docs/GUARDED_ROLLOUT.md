@@ -115,7 +115,23 @@ with the running `netDeployed`), `AllowedSet`, `DepositCapSet`, `WhitelistEnable
 
 ## 5. LIFTING the guards (going fully public)
 
-When you're ready to remove the training wheels — two admin calls, in any order:
+### Prerequisite — hand admin to the multisig FIRST
+
+During the rollout a **single admin key is acceptable**: the guards bound the blast radius (small
+whitelisted cohort, low cap), so a compromised key can do only bounded damage. But that key can also
+**lift its own guards** — so the moment you remove the bounds, the governance key must no longer be a
+single key. Therefore the order is fixed:
+
+```solidity
+// 1. Move governance to the multisig (registry is Ownable2Step — two-step, no fat-finger).
+registry.transferOwnership(safe);   // then the Safe calls acceptOwnership()
+//    (optionally route through a timelock so users get an exit window on future changes)
+```
+
+Only a single key is needed *during* the guarded phase; the multisig is required *before* the lift,
+never after. Do not lift the guards while a single EOA still owns the registry.
+
+### The lift — two admin calls (now made by the multisig), in any order:
 
 ```solidity
 registry.setWhitelistEnabled(false);   // anyone can open an account
