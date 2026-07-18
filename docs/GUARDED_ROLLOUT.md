@@ -88,8 +88,13 @@ callers are real accounts, or the counter could be spoofed.
 
 ## 4. Enable-at-deploy sequence (turning the guards ON)
 
-Run this once, right after deploying `registry` + `impl` + `factory` (belongs in the Base deploy
-script). Admin = the registry owner (a **multisig** at launch).
+**Implemented by `script/DeployBase.s.sol`** — it deploys the contracts, registers the fork-proven Base
+approved set, and runs exactly the sequence below. Simulate against live Base first (no funds needed):
+`PRIVATE_KEY=0x<any> forge script script/DeployBase.s.sol --rpc-url base`; broadcast with a funded key +
+`--broadcast --verify`. `DEPOSIT_CAP` and `ALLOWLIST` are env-configurable.
+
+Run this once, right after deploying `registry` + `impl` + `factory`. Admin starts as the deployer key
+(fine for the guarded phase; hand to a multisig before the lift, §5).
 
 ```solidity
 registry.setFactory(address(factory));            // bind the factory (set once)
