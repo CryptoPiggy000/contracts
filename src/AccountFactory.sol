@@ -3,6 +3,7 @@ pragma solidity ^0.8.28;
 
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {SmartInvestmentAccount} from "./SmartInvestmentAccount.sol";
+import {ProtocolRegistry} from "./ProtocolRegistry.sol";
 
 /// @title AccountFactory
 /// @notice Deploys a per-user account clone (EIP-1167) and initializes it in the SAME transaction,
@@ -10,6 +11,7 @@ import {SmartInvestmentAccount} from "./SmartInvestmentAccount.sol";
 /// @dev The CREATE2 salt namespaces addresses per owner, so accounts are counterfactual/derivable.
 contract AccountFactory {
     error ZeroAddress();
+    error NotAllowed();
 
     address public immutable implementation;
     address public immutable registry;
@@ -23,9 +25,15 @@ contract AccountFactory {
     }
 
     function createAccount(bytes32 userSalt) external returns (address account) {
+        // Guarded-rollout WHO gate: a no-op until the whitelist is enabled (see docs/GUARDED_ROLLOUT.md).
+        if (!ProtocolRegistry(registry).canOpen(msg.sender)) revert NotAllowed();
         bytes32 salt = keccak256(abi.encode(msg.sender, userSalt));
         account = Clones.cloneDeterministic(implementation, salt);
         SmartInvestmentAccount(account).initialize(msg.sender, registry);
+        // Register the account so it can report flows for the deposit cap. Best-effort: if the registry
+        // has no factory bound yet (un-wired setup), account creation still succeeds and the cap simply
+        // does not track this account.
+        try ProtocolRegistry(registry).registerAccount(account) {} catch {}
         emit AccountCreated(msg.sender, account, userSalt);
     }
 

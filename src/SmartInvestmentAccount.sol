@@ -96,6 +96,8 @@ contract SmartInvestmentAccount is ReentrancyGuard {
         ProtocolPosition memory p = registry.getProtocol(id);
         if (p.status != Status.ACTIVE) revert PositionNotActive();
 
+        registry.onDeploy(p.asset, amount); // guarded-rollout cap: reverts if this deposit breaches it
+
         IERC20(p.asset).forceApprove(p.target, amount);
         if (p.adapterType == AdapterType.ERC4626) {
             // A real vault mints shares for the deposit — zero means nothing was credited.
@@ -134,6 +136,9 @@ contract SmartInvestmentAccount is ReentrancyGuard {
         }
         uint256 received = IERC20(p.asset).balanceOf(address(this)) - balBefore;
         if (received == 0) revert NothingReceived();
+        // Tell the cap principal came back. Defensive try/catch: a misbehaving registry can NEVER block a
+        // withdrawal — money coming out stays unstoppable (the withdraw-anytime guarantee).
+        try registry.onReturn(p.asset, received) {} catch {}
         emit Withdrawn(id, received); // the ACTUAL amount out, not the requested/`max` sentinel
     }
 
@@ -152,6 +157,10 @@ contract SmartInvestmentAccount is ReentrancyGuard {
         if (!r.routeApproved(router)) revert RouteNotApproved();
         if (!r.isAssetApproved(assetOut)) revert AssetNotApproved();
 
+        // guarded-rollout cap: a base-asset BUY (spending USDC) counts toward the cap and can be blocked;
+        // a sell-back (assetIn is not the base asset) no-ops here, so closing a position is never blocked.
+        r.onDeploy(assetIn, amount);
+
         uint256 balBefore = IERC20(assetOut).balanceOf(address(this));
 
         IERC20(assetIn).forceApprove(router, amount);
@@ -161,6 +170,8 @@ contract SmartInvestmentAccount is ReentrancyGuard {
 
         uint256 out = IERC20(assetOut).balanceOf(address(this)) - balBefore;
         if (out < minOut) revert InsufficientOutput();
+        // A sell-back to the base asset credits the cap back; defensively wrapped (never blocks a swap out).
+        try r.onReturn(assetOut, out) {} catch {}
         emit Swapped(assetIn, assetOut, amount, out);
     }
 }

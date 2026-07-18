@@ -148,6 +148,30 @@ contract ForkBaseProtocols is Test {
         assertGe(IERC20(USDC).balanceOf(address(account)), 9_500e6, "dollars back in USDC after full round-trip");
     }
 
+    /// The guarded-rollout deposit cap holds against REAL Base Aave — an over-limit supply reverts on-chain.
+    function test_base_cap_blocks_over_limit() public onFork {
+        // Wire + enable the guard (setUp leaves it off). This test contract is the registry admin.
+        registry.setFactory(address(factory));
+        registry.setBaseAsset(USDC);
+        registry.setDepositCap(1_000e6);
+        registry.setDepositCapEnabled(true);
+
+        vm.prank(owner);
+        SmartInvestmentAccount capped = SmartInvestmentAccount(factory.createAccount(bytes32(uint256(2))));
+        deal(USDC, address(capped), 5_000e6);
+
+        Action[] memory under = new Action[](1);
+        under[0] = _dep(aaveId, 1_000e6); // exactly the cap — supplies to real Base Aave
+        vm.prank(owner);
+        capped.executePlan(under);
+
+        Action[] memory over = new Action[](1);
+        over[0] = _dep(aaveId, 1e6); // one over — reverts before touching Aave
+        vm.prank(owner);
+        vm.expectRevert(ProtocolRegistry.DepositCapExceeded.selector);
+        capped.executePlan(over);
+    }
+
     // --- helpers ---
     function _run(Action memory a) internal {
         Action[] memory plan = new Action[](1);
