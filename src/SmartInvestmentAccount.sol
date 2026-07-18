@@ -29,6 +29,7 @@ contract SmartInvestmentAccount is ReentrancyGuard {
     error AssetNotApproved();
     error SwapFailed();
     error InsufficientOutput();
+    error NothingReceived();
 
     address public owner;
     ProtocolRegistry public registry;
@@ -97,9 +98,11 @@ contract SmartInvestmentAccount is ReentrancyGuard {
 
         IERC20(p.asset).forceApprove(p.target, amount);
         if (p.adapterType == AdapterType.ERC4626) {
-            IERC4626(p.target).deposit(amount, address(this));
+            // A real vault mints shares for the deposit — zero means nothing was credited.
+            uint256 shares = IERC4626(p.target).deposit(amount, address(this));
+            if (shares == 0) revert NothingReceived();
         } else if (p.adapterType == AdapterType.AAVE) {
-            IAavePool(p.target).supply(p.asset, amount, address(this), 0);
+            IAavePool(p.target).supply(p.asset, amount, address(this), 0); // returns nothing
         } else {
             revert BadAdapter();
         }
@@ -111,19 +114,27 @@ contract SmartInvestmentAccount is ReentrancyGuard {
         ProtocolPosition memory p = registry.getProtocol(id);
         if (p.target == address(0)) revert UnknownPosition(); // status-independent
 
+        // Snapshot before: the balance-delta is the authoritative "received", not the protocol's own
+        // return value (with real funds, never trust a target to report its own payout honestly).
+        uint256 balBefore = IERC20(p.asset).balanceOf(address(this));
         if (p.adapterType == AdapterType.ERC4626) {
             IERC4626 v = IERC4626(p.target);
             if (amount == type(uint256).max) {
-                v.redeem(v.balanceOf(address(this)), address(this), address(this));
+                uint256 assets = v.redeem(v.balanceOf(address(this)), address(this), address(this));
+                if (assets == 0) revert NothingReceived();
             } else {
-                v.withdraw(amount, address(this), address(this));
+                uint256 burned = v.withdraw(amount, address(this), address(this));
+                if (burned == 0) revert NothingReceived();
             }
         } else if (p.adapterType == AdapterType.AAVE) {
-            IAavePool(p.target).withdraw(p.asset, amount, address(this)); // Aave: max = all
+            uint256 got = IAavePool(p.target).withdraw(p.asset, amount, address(this)); // max = all
+            if (got == 0) revert NothingReceived();
         } else {
             revert BadAdapter();
         }
-        emit Withdrawn(id, amount);
+        uint256 received = IERC20(p.asset).balanceOf(address(this)) - balBefore;
+        if (received == 0) revert NothingReceived();
+        emit Withdrawn(id, received); // the ACTUAL amount out, not the requested/`max` sentinel
     }
 
     /// @dev The highest-risk path: an opaque call to an APPROVED router, bounded by
