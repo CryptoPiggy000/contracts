@@ -16,6 +16,7 @@ remappings = [
 # pass `--fork-url mainnet` explicitly.
 [rpc_endpoints]
 mainnet = "${MAINNET_RPC_URL}"
+base = "${BASE_RPC_URL}"
 
 [fmt]
 line_length = 120
