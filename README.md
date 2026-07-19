@@ -3,7 +3,13 @@
 The **non-custodial trust core** of [CryptoPiggy](https://github.com/CryptoPiggy000): a simple, safe
 way for beginners to invest in crypto without giving up their keys. Foundry (Solidity `0.8.28`).
 
-> POC stage — **not audited**, no real funds. A formal audit gates mainnet.
+> **Real-funds track (2026-07-19):** targeting real funds on **Base mainnet**. External audit was
+> **declined** in favor of compensating controls — a registry **deposit cap + whitelist** guarded
+> rollout (liftable; [`docs/GUARDED_ROLLOUT.md`](./docs/GUARDED_ROLLOUT.md)), Slither + **Base fork
+> tests** (`test/fork/ForkBaseProtocols.t.sol` — real Aave V3 + Moonwell + Uniswap + earn→sell-back),
+> and a **`DeployBase`** script (`script/DeployBase.s.sol`, simulated). **Not yet on Base mainnet**
+> (needs a funded deployer key + go). Still **`onlyOwner` / non-custodial** — the platform never holds
+> funds. On branch `feat/registry-enumerate`.
 
 ## The set
 
