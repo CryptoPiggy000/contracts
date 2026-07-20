@@ -156,7 +156,7 @@ contract SmartInvestmentAccountTest is Test {
     function test_swap_unapprovedRoute_reverts() public {
         MockSwapRouter bad = new MockSwapRouter();
         Action[] memory plan = new Action[](1);
-        plan[0] = _swap(address(usdc), address(wsteth), address(bad), 10e18, 0);
+        plan[0] = _swap(address(usdc), address(wsteth), address(bad), 10e18, 1); // minOut>0 so the route check is what reverts
         vm.prank(user);
         vm.expectRevert(SmartInvestmentAccount.RouteNotApproved.selector);
         acct.executePlan(plan);
@@ -166,9 +166,31 @@ contract SmartInvestmentAccountTest is Test {
         vm.prank(admin);
         registry.disableAsset(address(wsteth));
         Action[] memory plan = new Action[](1);
-        plan[0] = _swap(address(usdc), address(wsteth), address(router), 10e18, 0);
+        plan[0] = _swap(address(usdc), address(wsteth), address(router), 10e18, 1); // minOut>0 so the asset check is what reverts
         vm.prank(user);
         vm.expectRevert(SmartInvestmentAccount.AssetNotApproved.selector);
+        acct.executePlan(plan);
+    }
+
+    /// REGRESSION (security review): the spend side (assetIn) must ALSO be an approved asset — otherwise a
+    /// swap could relay-spend any token the account holds through an approved router.
+    function test_swap_unapprovedAssetIn_reverts() public {
+        vm.prank(admin);
+        registry.disableAsset(address(usdc)); // the token being spent is no longer approved
+        Action[] memory plan = new Action[](1);
+        plan[0] = _swap(address(usdc), address(wsteth), address(router), 10e18, 1);
+        vm.prank(user);
+        vm.expectRevert(SmartInvestmentAccount.AssetNotApproved.selector);
+        acct.executePlan(plan);
+    }
+
+    /// REGRESSION (security review): a swap with a zero output floor is rejected — a real swap always has a
+    /// minimum, and 0 disables the balance-delta slippage/theft guard entirely.
+    function test_swap_zeroMinOut_reverts() public {
+        Action[] memory plan = new Action[](1);
+        plan[0] = _swap(address(usdc), address(wsteth), address(router), 10e18, 0);
+        vm.prank(user);
+        vm.expectRevert(SmartInvestmentAccount.ZeroMinOut.selector);
         acct.executePlan(plan);
     }
 
@@ -189,7 +211,7 @@ contract SmartInvestmentAccountTest is Test {
     }
 
     function test_exit_vault_max() public {
-        _run(_swap(address(usdc), address(usds), address(router), 300e18, 0));
+        _run(_swap(address(usdc), address(usds), address(router), 300e18, 1)); // minOut>0 (mock 1:1 over-delivers)
         _run(_dep(vaultId, 300e18));
         vm.prank(user);
         acct.exit(vaultId, type(uint256).max);
@@ -305,7 +327,7 @@ contract SmartInvestmentAccountTest is Test {
             assetOut: address(wsteth),
             router: address(down),
             amount: 10e18,
-            minOut: 0,
+            minOut: 1, // >0 so the router-revert (SwapFailed) is what surfaces, not ZeroMinOut
             routeData: abi.encodeWithSelector(
                 RevertingRouter.swap.selector, address(usdc), address(wsteth), uint256(10e18), uint256(0), address(acct)
             )

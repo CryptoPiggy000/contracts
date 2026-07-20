@@ -14,6 +14,7 @@ out/
 # Docs — ignore generated `forge doc` output, but keep hand-written runbooks.
 docs/*
 !docs/GUARDED_ROLLOUT.md
+!docs/SECURITY_REVIEW.md
 
 # Dotenv file
 .env

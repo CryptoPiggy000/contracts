@@ -13,9 +13,11 @@ import {AdapterType, Status, ActionKind, Action, ProtocolPosition} from "./Types
 /// @title SmartInvestmentAccount
 /// @notice Non-custodial per-user account, deployed as an EIP-1167 clone.
 /// @dev The platform can never call this: `executePlan` is `onlyOwner` — the user submits their own
-///      transaction. No `Action` kind names an external destination, so funds can only ever move
-///      WITHIN this account (idle <-> deployed/held). The only door out is `withdraw`, which sends to
-///      the owner's own wallet. `executePlan` dispatches by the position's `adapterType`.
+///      transaction. No `Action` can send funds to an arbitrary/attacker-chosen address: deposits/
+///      withdraws move value only between this account and a registry-APPROVED protocol, and a swap
+///      relays to a registry-APPROVED router bounded by an approve-exact (+reset) and a post-swap
+///      balance-delta >= minOut — so value always returns HERE. The only door to an outside address is
+///      `withdraw`, which sends to the owner's own wallet. `executePlan` dispatches by `adapterType`.
 contract SmartInvestmentAccount is ReentrancyGuard {
     using SafeERC20 for IERC20;
 
@@ -30,6 +32,7 @@ contract SmartInvestmentAccount is ReentrancyGuard {
     error SwapFailed();
     error InsufficientOutput();
     error NothingReceived();
+    error ZeroMinOut();
 
     address public owner;
     ProtocolRegistry public registry;
@@ -154,7 +157,11 @@ contract SmartInvestmentAccount is ReentrancyGuard {
         bytes calldata routeData
     ) internal {
         ProtocolRegistry r = registry;
+        if (minOut == 0) revert ZeroMinOut(); // a real swap always has a floor; 0 = no slippage/theft guard
         if (!r.routeApproved(router)) revert RouteNotApproved();
+        // BOTH sides must be approved: assetOut (what we hold) AND assetIn (what we spend) — otherwise a
+        // swap could relay-spend any token the account holds (e.g. vault shares) through an approved router.
+        if (!r.isAssetApproved(assetIn)) revert AssetNotApproved();
         if (!r.isAssetApproved(assetOut)) revert AssetNotApproved();
 
         // guarded-rollout cap: a base-asset BUY (spending USDC) counts toward the cap and can be blocked;

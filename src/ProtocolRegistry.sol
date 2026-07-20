@@ -22,6 +22,8 @@ contract ProtocolRegistry is Ownable2Step {
     error NotFactory();
     error FactoryAlreadySet();
     error DepositCapExceeded();
+    error NotAccount();
+    error BaseAssetAlreadySet();
 
     mapping(bytes32 positionId => ProtocolPosition) private _positions;
     bytes32[] private _positionIds; // append-only; enables off-chain enumeration (the indexer)
@@ -39,6 +41,9 @@ contract ProtocolRegistry is Ownable2Step {
     uint256 public netDeployed; // current net base-asset principal deployed (deposits+buys − withdraws+sells)
     mapping(address user => bool) public isAllowed; // whitelist membership (used when whitelistEnabled)
     mapping(address account => bool) public isAccount; // factory-registered accounts (may report flows)
+    mapping(address account => uint256) public deployedBy; // per-account base-asset principal AT COST — a
+    // return (measured at market value) can never subtract more than this, so yield/gains can't free the
+    // cap room other accounts occupy.
 
     event ProtocolAdded(
         bytes32 indexed positionId, AdapterType adapterType, address target, address asset, bytes32 category
@@ -148,8 +153,12 @@ contract ProtocolRegistry is Ownable2Step {
     }
 
     /// @notice The unit the deposit cap is denominated in (e.g. USDC). Only flows in this asset count
-    ///         toward `netDeployed`/the cap; unset (address(0)) means nothing is capped.
+    ///         toward `netDeployed`/the cap; unset (address(0)) means nothing is capped. SET-ONCE:
+    ///         changing it after accounts have deployed would strand `netDeployed`/`deployedBy` (counted
+    ///         in the old asset), so it can only be set from unset.
     function setBaseAsset(address asset) external onlyOwner {
+        if (asset == address(0)) revert ZeroAddress(); // set-once + non-zero, mirroring setFactory
+        if (baseAsset != address(0)) revert BaseAssetAlreadySet();
         baseAsset = asset;
         emit BaseAssetSet(asset);
     }
@@ -205,8 +214,16 @@ contract ProtocolRegistry is Ownable2Step {
     ///         going IN when the cap would be breached. No-ops for non-accounts and non-base flows, so
     ///         un-wired setups (and any outside caller) are unaffected.
     function onDeploy(address asset, uint256 amount) external {
-        if (!isAccount[msg.sender] || asset != baseAsset || amount == 0) return;
+        if (asset != baseAsset || amount == 0) return; // only base-asset principal counts
+        if (!isAccount[msg.sender]) {
+            // FAIL-CLOSED: once a factory is bound and the cap is enforced, an unregistered caller must
+            // NOT silently bypass the cap (a mis-deploy that forgot setFactory would otherwise leave the
+            // cap enabled-but-inert). Un-wired setups (factory unset) stay a harmless no-op.
+            if (factory != address(0) && depositCapEnabled) revert NotAccount();
+            return;
+        }
         if (depositCapEnabled && netDeployed + amount > depositCap) revert DepositCapExceeded();
+        deployedBy[msg.sender] += amount;
         netDeployed += amount;
         emit Deployed(msg.sender, amount, netDeployed);
     }
@@ -216,7 +233,13 @@ contract ProtocolRegistry is Ownable2Step {
     ///         which preserves the withdraw-anytime guarantee. (Accounts also wrap this call defensively.)
     function onReturn(address asset, uint256 amount) external {
         if (!isAccount[msg.sender] || asset != baseAsset || amount == 0) return;
-        netDeployed = amount >= netDeployed ? 0 : netDeployed - amount;
-        emit Returned(msg.sender, amount, netDeployed);
+        // CLAMP to this account's cost basis: `amount` is a market-value balance-delta (principal +
+        // yield/gains), which must never subtract more than the account actually deployed — otherwise a
+        // yielding withdrawal frees cap room that OTHER accounts occupy (the cap could be breached).
+        uint256 dec = amount > deployedBy[msg.sender] ? deployedBy[msg.sender] : amount;
+        if (dec == 0) return;
+        deployedBy[msg.sender] -= dec;
+        netDeployed = dec >= netDeployed ? 0 : netDeployed - dec;
+        emit Returned(msg.sender, dec, netDeployed);
     }
 }

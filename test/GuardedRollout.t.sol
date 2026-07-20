@@ -162,7 +162,7 @@ contract GuardedRolloutTest is Test {
         a.assetOut = address(wsteth);
         a.router = address(router);
         a.amount = amt;
-        a.minOut = 0;
+        a.minOut = 1; // >0: the account rejects a zero floor (ZeroMinOut); mock over-delivers this
         a.routeData = abi.encodeWithSelector(MockSwapRouter.swap.selector, usdc, wsteth, amt, 0, address(acct));
     }
 
@@ -172,7 +172,7 @@ contract GuardedRolloutTest is Test {
         a.assetOut = address(usdc);
         a.router = address(router);
         a.amount = amt;
-        a.minOut = 0;
+        a.minOut = 1; // >0: the account rejects a zero floor (ZeroMinOut); mock over-delivers this
         a.routeData = abi.encodeWithSelector(MockSwapRouter.swap.selector, wsteth, usdc, amt, 0, address(acct));
     }
 
@@ -244,6 +244,48 @@ contract GuardedRolloutTest is Test {
         assertEq(registry.netDeployed(), 0, "cap credited back on the sell-back");
     }
 
+    /// REGRESSION (security review, HIGH): a yielding/appreciated return must NEVER free more cap room
+    /// than the account's cost basis. Two accounts share the cap; if A's gains freed room measured at
+    /// market value, that room actually belongs to B's still-live principal and the cap could be breached.
+    function test_cap_yieldingReturnCannotBreachCap() public {
+        address A = address(acct); // registered in setUp
+        address B = makeAddr("acctB");
+        vm.prank(address(factory));
+        registry.registerAccount(B); // only the bound factory may register
+
+        _enableCap(200e18);
+
+        // A deploys 100, B deploys 100 -> exactly at the 200 cap.
+        vm.prank(A);
+        registry.onDeploy(address(usdc), 100e18);
+        vm.prank(B);
+        registry.onDeploy(address(usdc), 100e18);
+        assertEq(registry.netDeployed(), 200e18, "at the cap");
+
+        // A's position appreciated and returns 150 (100 principal + 50 gain). The credit is CLAMPED to
+        // A's 100 cost basis: only 100 frees, not 150 (which would permit 150 more on top of B's live 100).
+        vm.prank(A);
+        registry.onReturn(address(usdc), 150e18);
+        assertEq(registry.netDeployed(), 100e18, "freed only A's cost basis, not the inflated return");
+        assertEq(registry.deployedBy(A), 0, "A's principal fully returned");
+        assertEq(registry.deployedBy(B), 100e18, "B untouched");
+
+        // The cap now correctly permits only 100 more (respecting B's live 100); one wei over is blocked.
+        vm.prank(A);
+        registry.onDeploy(address(usdc), 100e18); // 100 -> 200, exactly the cap
+        assertEq(registry.netDeployed(), 200e18);
+        vm.prank(A);
+        vm.expectRevert(ProtocolRegistry.DepositCapExceeded.selector);
+        registry.onDeploy(address(usdc), 1); // no breach
+    }
+
+    /// The base-asset unit is set-once (setUp set it to USDC) — re-setting would strand the accounting.
+    function test_setBaseAsset_setOnce() public {
+        vm.prank(admin);
+        vm.expectRevert(ProtocolRegistry.BaseAssetAlreadySet.selector);
+        registry.setBaseAsset(address(wsteth));
+    }
+
     /// The LIFT: disabling the cap removes the limit (large deposit sails through).
     function test_cap_lift_removesLimit() public {
         _enableCap(100e18);
@@ -272,9 +314,19 @@ contract GuardedRolloutTest is Test {
 
     // ============================================================ access control on the flow hooks
 
-    /// An outside caller can't move the cap counter — the hooks no-op for non-accounts.
-    function test_onDeploy_ignoresNonAccount() public {
+    /// With the cap enforced (factory bound in setUp), a non-account caller is FAIL-CLOSED: its deploy
+    /// reverts rather than silently bypassing the cap. Either way the counter can't move.
+    function test_onDeploy_nonAccount_failsClosed() public {
         _enableCap(100e18);
+        vm.prank(stranger);
+        vm.expectRevert(ProtocolRegistry.NotAccount.selector);
+        registry.onDeploy(address(usdc), 1_000_000e18);
+        assertEq(registry.netDeployed(), 0);
+    }
+
+    /// With the cap OFF, a stray non-account call is a harmless no-op — there's nothing to protect.
+    function test_onDeploy_nonAccount_noopWhenCapOff() public {
+        // cap disabled by default in setUp; factory is bound
         vm.prank(stranger);
         registry.onDeploy(address(usdc), 1_000_000e18); // no revert, no effect
         assertEq(registry.netDeployed(), 0);

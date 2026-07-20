@@ -57,7 +57,13 @@ State (on `ProtocolRegistry`): `depositCapEnabled` (bool), `depositCap` (uint256
 - Only flows in `baseAsset` count. A held→held rebalance (e.g. WETH→cbBTC) doesn't touch the cap.
 - No oracle: the cap is denominated in base-asset units the account already moves. Held-asset price
   appreciation is *not* counted as principal — this is a principal cap, not a TVL meter.
-- **`baseAsset` must be set** (to USDC) for the cap to count anything. Unset ⇒ nothing is capped.
+- **Per-account cost basis (`deployedBy`).** Each account's contribution is tracked *at cost*. A return
+  is measured at market value (principal + yield/gains), so `onReturn`'s decrement is **clamped to that
+  account's `deployedBy`** — a yielding withdrawal can only free the cap room the account actually
+  occupied, never room that belongs to *other* accounts' still-live principal. Without this clamp the
+  global cap could be breached (a security-review HIGH finding — see `test_cap_yieldingReturnCannotBreachCap`).
+- **`baseAsset` must be set** (to USDC) for the cap to count anything. Unset ⇒ nothing is capped. It is
+  **set-once and non-zero** — changing it after accounts deploy would strand the accounting.
 
 Admin controls (owner-only):
 
@@ -81,8 +87,11 @@ callers are real accounts, or the counter could be spoofed.
 - The registry has a **set-once** `factory` binding (`setFactory`, called right after deploy).
 - The factory calls `registry.registerAccount(account)` for every account it creates (best-effort, so
   un-wired test setups still work). Only the bound factory can register.
-- `onDeploy` / `onReturn` **no-op for any caller that isn't a registered account** — so an outside
-  contract cannot move `netDeployed`, and an un-wired deployment simply doesn't track (guards inert).
+- `onReturn` **no-ops for any caller that isn't a registered account** — money coming OUT is never
+  gated, so an outside caller simply can't move the counter downward.
+- `onDeploy` is **fail-closed** for a non-account caller: once the factory is bound *and* the cap is
+  enforced, an unregistered caller **reverts** (`NotAccount`) rather than silently bypassing the cap. In
+  an un-wired deployment (factory unset), it stays a harmless no-op so the guards are simply inert.
 
 ---
 
