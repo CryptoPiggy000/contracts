@@ -28,9 +28,13 @@ contract DeployBase is Script {
     // --- verified Base mainnet addresses (proven in test/fork/ForkBaseProtocols.t.sol) ---
     address constant USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913; // native USDC, 6 dec (base asset)
     address constant WETH = 0x4200000000000000000000000000000000000006; // canonical WETH (held asset)
+    address constant CBBTC = 0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf; // Coinbase Wrapped BTC (held asset)
     address constant AAVE_V3_POOL = 0xA238Dd80C259a72e81d7e4664a9801593F98d1c5;
     address constant MOONWELL_USDC = 0xc1256Ae5FF1cf2719D4937adb3bbCCab2E00A2Ca; // MetaMorpho ERC-4626, asset=USDC
-    address constant UNIV3_ROUTER = 0x2626664c2603336E57B271c5C0b26F421741e481; // Uniswap SwapRouter02
+    // DEX-aggregator routers the app swaps through — opaque routeData from the backend /market/quote,
+    // approve-and-call (proven in test/fork/ForkBaseAggregator.t.sol). Either can win a given trade.
+    address constant ZEROX_ALLOWANCE_HOLDER = 0x0000000000001fF3684f28c67538d4D072C22734; // 0x Swap API v2
+    address constant KYBER_ROUTER = 0x6131B5fae19EA4f9D964eAc0408E4408b66337b5; // KyberSwap MetaAggregationRouterV2
 
     function run() external {
         uint256 pk = vm.envUint("PRIVATE_KEY");
@@ -52,7 +56,9 @@ contract DeployBase is Script {
         registry.addProtocol(AdapterType.ERC4626, MOONWELL_USDC, USDC, "savings");
         registry.addAsset(USDC, PositionClass.STABLECOIN);
         registry.addAsset(WETH, PositionClass.HELD_ASSET);
-        registry.setRoute(UNIV3_ROUTER, true);
+        registry.addAsset(CBBTC, PositionClass.HELD_ASSET);
+        registry.setRoute(ZEROX_ALLOWANCE_HOLDER, true); // 0x — approve+call via /market/quote
+        registry.setRoute(KYBER_ROUTER, true); // KyberSwap — approve+call via /market/quote
 
         // --- guarded rollout ON (docs/GUARDED_ROLLOUT.md §4) ---
         registry.setFactory(address(factory)); // set-once: accounts register through the factory
