@@ -26,6 +26,7 @@ contract OpsScenario is Script {
     uint256 constant USER2_PK = 0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a;
     address constant USER1 = 0x70997970C51812dc3A010C7d01b50e0d17dc79C8;
     address constant USER2 = 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC;
+    address constant COLLECTOR = 0xa0Ee7A142d267C1f36714E4a8F75612F20a79720; // anvil #9 — fee sink
 
     MockERC20 usdc;
     MockERC20 wsteth;
@@ -47,6 +48,7 @@ contract OpsScenario is Script {
         console.log("WSTETH", address(wsteth));
         console.log("ACCT1", a1);
         console.log("ACCT2", a2);
+        console.log("COLLECTOR", COLLECTOR);
     }
 
     function deployAndWire() internal {
@@ -69,6 +71,8 @@ contract OpsScenario is Script {
         registry.setRoute(address(router), true);
         registry.setFactory(address(factory)); // so createAccount registers the account (flows count)
         registry.setBaseAsset(address(usdc)); // so Deployed/Returned fire on USDC principal
+        registry.setFeeCollector(COLLECTOR); // 1% entry fee → DepositFeePaid → ops revenue
+        registry.setDepositFeeBps(100);
 
         usdc.mint(address(router), 1_000_000e18);
         wsteth.mint(address(router), 1_000_000e18);
