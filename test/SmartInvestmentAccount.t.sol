@@ -36,6 +36,7 @@ contract SmartInvestmentAccountTest is Test {
     bytes32 vaultId;
 
     uint256 constant START = 1000e18;
+    address collector = makeAddr("collector");
 
     function setUp() public {
         usdc = new MockERC20("USD Coin", "USDC", 18);
@@ -128,6 +129,57 @@ contract SmartInvestmentAccountTest is Test {
         assertEq(usdc.balanceOf(address(acct)), START - 400e18);
         assertEq(aave.supplied(address(acct), address(usdc)), 400e18);
         assertEq(usdc.allowance(address(acct), address(aave)), 0); // approval reset
+    }
+
+    // ------------------------------------------------------------------ deposit fee (revenue)
+    function _setFee(uint16 bps) internal {
+        vm.startPrank(admin);
+        registry.setFeeCollector(collector);
+        registry.setDepositFeeBps(bps);
+        vm.stopPrank();
+    }
+
+    /// 1% is skimmed to the collector; only the NET deploys into the venue; the gross leaves the account.
+    function test_depositFee_skimsNetToVenue() public {
+        _setFee(100); // 1%
+        vm.expectEmit(true, true, false, true, address(acct));
+        emit SmartInvestmentAccount.DepositFeePaid(aaveId, collector, 4e18);
+        _run(_dep(aaveId, 400e18));
+        assertEq(usdc.balanceOf(collector), 4e18, "1% to collector");
+        assertEq(aave.supplied(address(acct), address(usdc)), 396e18, "net principal deployed");
+        assertEq(usdc.balanceOf(address(acct)), START - 400e18, "gross left the account");
+    }
+
+    /// No fee is taken unless the admin has turned it on (default off).
+    function test_depositFee_offByDefault() public {
+        _run(_dep(aaveId, 400e18));
+        assertEq(usdc.balanceOf(collector), 0);
+        assertEq(aave.supplied(address(acct), address(usdc)), 400e18);
+    }
+
+    /// A rate with no collector set is a no-op — never burns the fee.
+    function test_depositFee_disabledWhenNoCollector() public {
+        vm.prank(admin);
+        registry.setDepositFeeBps(100); // bps set, collector still address(0)
+        _run(_dep(aaveId, 400e18));
+        assertEq(aave.supplied(address(acct), address(usdc)), 400e18, "no fee without a collector");
+    }
+
+    /// Crypto buys are NOT charged — the fee is savings-deposits only.
+    function test_depositFee_notOnSwap() public {
+        _setFee(100);
+        _run(_swap(address(usdc), address(wsteth), address(router), 200e18, 1));
+        assertEq(usdc.balanceOf(collector), 0, "swaps are not charged");
+    }
+
+    /// The fee is entry-only: withdrawing is never charged, so the withdraw-anytime promise is intact.
+    function test_depositFee_notOnWithdraw() public {
+        _setFee(100);
+        _run(_dep(aaveId, 400e18)); // one fee: 4, net 396 deployed
+        assertEq(usdc.balanceOf(collector), 4e18);
+        _run(_wd(aaveId, 396e18)); // withdraw must not be charged
+        assertEq(usdc.balanceOf(collector), 4e18, "no fee on the way out");
+        assertEq(usdc.balanceOf(address(acct)), START - 4e18, "user recovered everything but the one entry fee");
     }
 
     function test_deposit_vault_viaSwap() public {

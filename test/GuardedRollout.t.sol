@@ -349,4 +349,37 @@ contract GuardedRolloutTest is Test {
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, stranger));
         registry.setBaseAsset(address(usdc));
     }
+
+    // ============================================================ deposit fee (revenue)
+
+    /// The fee is admin-tunable but HARD-CAPPED in bytecode — the admin can never exceed MAX_DEPOSIT_FEE_BPS.
+    function test_depositFee_boundedByMax() public {
+        vm.startPrank(admin);
+        registry.setDepositFeeBps(registry.MAX_DEPOSIT_FEE_BPS()); // 2% — the ceiling, allowed
+        assertEq(registry.depositFeeBps(), 200);
+        vm.expectRevert(ProtocolRegistry.FeeTooHigh.selector);
+        registry.setDepositFeeBps(201); // one bp over the cap
+        vm.stopPrank();
+    }
+
+    function test_depositFee_onlyOwner() public {
+        vm.prank(stranger);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, stranger));
+        registry.setDepositFeeBps(100);
+
+        vm.prank(stranger);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, stranger));
+        registry.setFeeCollector(stranger);
+    }
+
+    /// The combined getter accounts read at deposit time returns (rate, destination).
+    function test_depositFee_getter() public {
+        vm.startPrank(admin);
+        registry.setDepositFeeBps(150);
+        registry.setFeeCollector(makeAddr("treasury"));
+        vm.stopPrank();
+        (uint16 bps, address dest) = registry.depositFee();
+        assertEq(bps, 150);
+        assertEq(dest, makeAddr("treasury"));
+    }
 }

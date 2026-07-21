@@ -39,6 +39,7 @@ contract SmartInvestmentAccount is ReentrancyGuard {
     bool private _initialized;
 
     event Deposited(bytes32 indexed positionId, uint256 amount);
+    event DepositFeePaid(bytes32 indexed positionId, address indexed collector, uint256 fee);
     event Withdrawn(bytes32 indexed positionId, uint256 amount);
     event Swapped(address indexed assetIn, address indexed assetOut, uint256 amountIn, uint256 amountOut);
     event WithdrawnToOwner(address indexed token, uint256 amount);
@@ -98,6 +99,19 @@ contract SmartInvestmentAccount is ReentrancyGuard {
     function _deposit(bytes32 id, uint256 amount) internal {
         ProtocolPosition memory p = registry.getProtocol(id);
         if (p.status != Status.ACTIVE) revert PositionNotActive();
+
+        // Entry fee: a bounded, admin-set % skimmed to the fee collector on savings deposits ONLY (never on
+        // withdrawals/swaps). Read live from the registry, so it's the current rate the owner is signing for.
+        // Safe under nonReentrant; a standard ERC20 transfer to the collector cannot re-enter. Off by default.
+        (uint16 feeBps, address collector) = registry.depositFee();
+        if (feeBps != 0 && collector != address(0)) {
+            uint256 fee = (amount * feeBps) / 10_000;
+            if (fee != 0) {
+                IERC20(p.asset).safeTransfer(collector, fee);
+                amount -= fee; // deploy (and cap-count) the NET principal
+                emit DepositFeePaid(id, collector, fee);
+            }
+        }
 
         registry.onDeploy(p.asset, amount); // guarded-rollout cap: reverts if this deposit breaches it
 

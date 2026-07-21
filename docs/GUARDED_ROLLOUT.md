@@ -163,3 +163,31 @@ That's the whole lift. After it:
 
 No redeploy, no migration, no user action required. The guards were additive and are removed by flipping
 two booleans — which is the whole point.
+
+---
+
+## 6. Deposit fee (revenue) — bounded + opt-in
+
+Not a guard, but it shares the guards' trust property: **admin-tunable, hard-capped in bytecode.** A
+one-time entry fee is skimmed to a collector when an account **deposits into a savings venue** — and
+**only then**. It is never taken on withdrawals, exits, or swaps, so the withdraw-anytime promise and
+non-custody are untouched. The fee lives in the user's own signed `executePlan`, so the platform can
+never trigger it unilaterally.
+
+State (on `ProtocolRegistry`): `depositFeeBps` (uint16), `feeCollector` (address),
+`MAX_DEPOSIT_FEE_BPS` (constant = **200 = 2%**).
+
+| Call | Effect |
+|---|---|
+| `setFeeCollector(treasury)` | Where fees accrue. `address(0)` = fee OFF (accounts skip it even if bps>0) |
+| `setDepositFeeBps(bps)` | Set the rate; **reverts `FeeTooHigh` if `bps > MAX_DEPOSIT_FEE_BPS`** |
+
+- **Default is 0 / unset ⇒ no fee.** Opt-in: launch at zero, turn it on after the pilot proves
+  willingness-to-pay. Existing behavior is unchanged until you set both a rate and a collector.
+- **Provably capped:** `MAX_DEPOSIT_FEE_BPS` is a `constant`, so even a compromised admin can never set
+  a confiscatory fee — the ceiling is not itself adjustable.
+- The account skims the fee from the deposit, deploys the **net** principal (the cap counts net), and
+  emits `DepositFeePaid(positionId, collector, fee)` — an on-chain revenue signal the ops indexer can
+  track.
+- To turn on: `setFeeCollector(treasury); setDepositFeeBps(100); // e.g. 1%`. To turn off:
+  `setDepositFeeBps(0)` (or `setFeeCollector(address(0))`).

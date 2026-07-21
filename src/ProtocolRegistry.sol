@@ -24,6 +24,7 @@ contract ProtocolRegistry is Ownable2Step {
     error DepositCapExceeded();
     error NotAccount();
     error BaseAssetAlreadySet();
+    error FeeTooHigh();
 
     mapping(bytes32 positionId => ProtocolPosition) private _positions;
     bytes32[] private _positionIds; // append-only; enables off-chain enumeration (the indexer)
@@ -45,6 +46,14 @@ contract ProtocolRegistry is Ownable2Step {
     // return (measured at market value) can never subtract more than this, so yield/gains can't free the
     // cap room other accounts occupy.
 
+    // --- Revenue: entry fee on savings deposits. A one-time, at-execution, USER-SIGNED cut skimmed when an
+    //     account deposits into a yield venue — NEVER on withdrawals/swaps, so the withdraw-anytime promise
+    //     and non-custody are untouched. The rate is admin-tunable but HARD-CAPPED in bytecode, so the admin
+    //     can never set a confiscatory fee. Default 0 / unset ⇒ no fee (opt-in). ---
+    uint16 public constant MAX_DEPOSIT_FEE_BPS = 200; // 2% — the ceiling the admin can NEVER exceed
+    uint16 public depositFeeBps; // current entry fee (bps of the deposited amount); 0 = off
+    address public feeCollector; // where fees accrue; address(0) = fee off even if bps > 0
+
     event ProtocolAdded(
         bytes32 indexed positionId, AdapterType adapterType, address target, address asset, bytes32 category
     );
@@ -63,6 +72,8 @@ contract ProtocolRegistry is Ownable2Step {
     event AccountRegistered(address indexed account);
     event Deployed(address indexed account, uint256 amount, uint256 netDeployed);
     event Returned(address indexed account, uint256 amount, uint256 netDeployed);
+    event DepositFeeBpsSet(uint16 bps);
+    event FeeCollectorSet(address indexed collector);
 
     /// @param admin_ the governance owner (a key for the POC; a multisig/timelock at scale).
     constructor(address admin_) Ownable(admin_) {}
@@ -192,6 +203,27 @@ contract ProtocolRegistry is Ownable2Step {
     function setDepositCap(uint256 cap) external onlyOwner {
         depositCap = cap;
         emit DepositCapSet(cap);
+    }
+
+    // ----------------------------------------------------------------- revenue: deposit fee (admin)
+
+    /// @notice Tune the savings-deposit entry fee (bps). Bounded by `MAX_DEPOSIT_FEE_BPS` in bytecode, so
+    ///         the admin can never set a confiscatory fee — the fee is adjustable but provably capped.
+    function setDepositFeeBps(uint16 bps) external onlyOwner {
+        if (bps > MAX_DEPOSIT_FEE_BPS) revert FeeTooHigh();
+        depositFeeBps = bps;
+        emit DepositFeeBpsSet(bps);
+    }
+
+    /// @notice Set where deposit fees accrue. address(0) turns the fee OFF (accounts skip it even if bps>0).
+    function setFeeCollector(address collector) external onlyOwner {
+        feeCollector = collector;
+        emit FeeCollectorSet(collector);
+    }
+
+    /// @notice The current entry fee, read by accounts at deposit time. One call → (rate, destination).
+    function depositFee() external view returns (uint16 bps, address collector) {
+        return (depositFeeBps, feeCollector);
     }
 
     /// @notice Whether `user` may open an account. True when the whitelist is off or the user is allowed.
